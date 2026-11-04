@@ -630,8 +630,18 @@ func verifyOutput(output, input string) bool {
 }
 
 func probeDuration(path string) (float64, error) {
-	cmd := exec.Command(ffprobePath(), "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
+	// Prefer video stream duration (container duration can be wrong/truncated)
+	cmd := exec.Command(ffprobePath(), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
 	out, err := cmd.Output()
+	if err == nil {
+		var d float64
+		fmt.Sscanf(strings.TrimSpace(string(out)), "%f", &d)
+		if d > 0 {
+			return d, nil
+		}
+	}
+	cmd = exec.Command(ffprobePath(), "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
+	out, err = cmd.Output()
 	if err != nil {
 		return 0, err
 	}
