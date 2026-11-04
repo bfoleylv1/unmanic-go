@@ -426,9 +426,22 @@ func processFile(fileID, path string, originalSize int64) {
 	}
 	defer os.Remove(ramFile)
 
+	// Repair/remux pre-pass: fix broken tags/container errors before transcoding
+	inputFile := ramFile
+	repairedFile := ramFile + ".repaired.mkv"
+	repairCmd := exec.Command(ffmpegPath(), "-y", "-err_detect", "ignore_err", "-i", ramFile, "-c", "copy", "-f", "matroska", repairedFile)
+	repairCmd.Stdout = os.Stdout
+	repairCmd.Stderr = os.Stderr
+	if rerr := repairCmd.Run(); rerr == nil {
+		if st, serr := os.Stat(repairedFile); serr == nil && st.Size() > 0 {
+			inputFile = repairedFile
+		}
+	}
+	defer os.Remove(repairedFile)
+
 	outputFile := ramFile + ".mp4"
 	defer os.Remove(outputFile) // ensure ramdisk is freed promptly
-	cmd := exec.Command(ffmpegPath(), "-y", "-i", ramFile,
+	cmd := exec.Command(ffmpegPath(), "-y", "-err_detect", "ignore_err", "-i", inputFile,
 		"-map", "0:v", "-c:v", "libx264", "-preset", "fast", "-crf", "23",
 		"-vf", "scale=-2:720",
 		"-map", "0:a:m:language:eng?", "-c:a", "aac", "-b:a", "192k",
@@ -444,7 +457,7 @@ func processFile(fileID, path string, originalSize int64) {
 		return
 	}
 
-	if !verifyOutput(outputFile, ramFile) {
+	if !verifyOutput(outputFile, inputFile) {
 		updateStatus(fileID, "error", originalSize, "verification failed")
 		os.Remove(outputFile)
 		return
