@@ -330,11 +330,12 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
-	var total, pending, done, errs int64
+	var total, pending, done, errs, skipped int64
 	db.QueryRow("SELECT COUNT(*) FROM files").Scan(&total)
 	db.QueryRow("SELECT COUNT(*) FROM files WHERE status='pending'").Scan(&pending)
 	db.QueryRow("SELECT COUNT(*) FROM files WHERE status='done'").Scan(&done)
 	db.QueryRow("SELECT COUNT(*) FROM files WHERE status='error'").Scan(&errs)
+	db.QueryRow("SELECT COUNT(*) FROM files WHERE status='skipped'").Scan(&skipped)
 	var originalSize, outputSize int64
 	db.QueryRow("SELECT COALESCE(SUM(original_size),0) FROM files WHERE status='done'").Scan(&originalSize)
 	db.QueryRow("SELECT COALESCE(SUM(output_size),0) FROM files WHERE status='done'").Scan(&outputSize)
@@ -343,6 +344,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		"pending": pending,
 		"done": done,
 		"errors": errs,
+		"skipped": skipped,
 		"running": workersRunning,
 		"original_size": originalSize,
 		"output_size": outputSize,
@@ -412,6 +414,11 @@ func worker(id int, cancel chan struct{}) {
 
 func processFile(fileID, path string, originalSize int64) {
 	updateStatus(fileID, "processing", 0, "")
+	// Skip corrupt/invalid input files (e.g. zero-filled) instead of failing in ffmpeg
+	if _, err := probeDuration(path); err != nil {
+		updateStatus(fileID, "skipped", originalSize, "invalid input: "+err.Error())
+		return
+	}
 	ramFile, err := copyToRamdisk(path)
 	if err != nil {
 		updateStatus(fileID, "error", originalSize, err.Error())
