@@ -420,6 +420,7 @@ func processFile(fileID, path string, originalSize int64) {
 	defer os.Remove(ramFile)
 
 	outputFile := ramFile + ".mp4"
+	defer os.Remove(outputFile) // ensure ramdisk is freed promptly
 	cmd := exec.Command(ffmpegPath(), "-y", "-i", ramFile,
 		"-map", "0:v", "-c:v", "libx264", "-preset", "fast", "-crf", "23",
 		"-vf", "scale=-2:720",
@@ -455,9 +456,12 @@ func processFile(fileID, path string, originalSize int64) {
 	}
 	os.Remove(path)
 	if err := os.Rename(tmpReplace, path); err != nil {
+		os.Remove(outputFile)
+		os.Remove(tmpReplace)
 		updateStatus(fileID, "error", originalSize, "rename: "+err.Error())
 		return
 	}
+	os.Remove(outputFile)
 
 	updateStatus(fileID, "done", outputSize, "")
 	notifyLibrary(path)
