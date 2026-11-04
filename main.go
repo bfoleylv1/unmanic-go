@@ -414,6 +414,11 @@ func worker(id int, cancel chan struct{}) {
 
 func processFile(fileID, path string, originalSize int64) {
 	updateStatus(fileID, "processing", 0, "")
+	// Fast-fail on invalid/corrupt input (e.g. zero-filled) - repair cannot help
+	if _, err := probeDuration(path); err != nil {
+		updateStatus(fileID, "error", originalSize, "invalid input: "+err.Error())
+		return
+	}
 	ramFile, err := copyToRamdisk(path)
 	if err != nil {
 		updateStatus(fileID, "error", originalSize, err.Error())
