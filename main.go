@@ -414,11 +414,6 @@ func worker(id int, cancel chan struct{}) {
 
 func processFile(fileID, path string, originalSize int64) {
 	updateStatus(fileID, "processing", 0, "")
-	// Skip corrupt/invalid input files (e.g. zero-filled) instead of failing in ffmpeg
-	if _, err := probeDuration(path); err != nil {
-		updateStatus(fileID, "skipped", originalSize, "invalid input: "+err.Error())
-		return
-	}
 	ramFile, err := copyToRamdisk(path)
 	if err != nil {
 		updateStatus(fileID, "error", originalSize, err.Error())
@@ -426,35 +421,42 @@ func processFile(fileID, path string, originalSize int64) {
 	}
 	defer os.Remove(ramFile)
 
-	// Repair/remux pre-pass: fix broken tags/container errors before transcoding
-	inputFile := ramFile
-	repairedFile := ramFile + ".repaired.mkv"
-	repairCmd := exec.Command(ffmpegPath(), "-y", "-err_detect", "ignore_err", "-i", ramFile, "-c", "copy", "-f", "matroska", repairedFile)
-	repairCmd.Stdout = os.Stdout
-	repairCmd.Stderr = os.Stderr
-	if rerr := repairCmd.Run(); rerr == nil {
-		if st, serr := os.Stat(repairedFile); serr == nil && st.Size() > 0 {
-			inputFile = repairedFile
-		}
-	}
-	defer os.Remove(repairedFile)
-
 	outputFile := ramFile + ".mp4"
 	defer os.Remove(outputFile) // ensure ramdisk is freed promptly
-	cmd := exec.Command(ffmpegPath(), "-y", "-err_detect", "ignore_err", "-i", inputFile,
-		"-map", "0:v", "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-		"-vf", "scale=-2:720",
-		"-map", "0:a:m:language:eng?", "-c:a", "aac", "-b:a", "192k",
-		"-af", fmt.Sprintf("volume=%.2f", config.VolumeBoost),
-		"-ac", "2",
-		"-sn",
-		"-f", "mp4", outputFile)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		os.Remove(outputFile)
-		updateStatus(fileID, "error", originalSize, "ffmpeg: "+err.Error())
-		return
+
+	// First attempt: transcode directly
+	inputFile := ramFile
+	transcode := func(inp string) error {
+		c := exec.Command(ffmpegPath(), "-y", "-err_detect", "ignore_err", "-i", inp,
+			"-map", "0:v", "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+			"-vf", "scale=-2:720",
+			"-map", "0:a:m:language:eng?", "-c:a", "aac", "-b:a", "192k",
+			"-af", fmt.Sprintf("volume=%.2f", config.VolumeBoost),
+			"-ac", "2",
+			"-sn",
+			"-f", "mp4", outputFile)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		return c.Run()
+	}
+
+	if err := transcode(inputFile); err != nil {
+		// On error: repair (remux) then retry conversion
+		repairedFile := ramFile + ".repaired.mkv"
+		repairCmd := exec.Command(ffmpegPath(), "-y", "-err_detect", "ignore_err", "-i", ramFile, "-c", "copy", "-f", "matroska", repairedFile)
+		repairCmd.Stdout = os.Stdout
+		repairCmd.Stderr = os.Stderr
+		if rerr := repairCmd.Run(); rerr == nil {
+			if st, serr := os.Stat(repairedFile); serr == nil && st.Size() > 0 {
+				inputFile = repairedFile
+			}
+		}
+		defer os.Remove(repairedFile)
+		if rerr2 := transcode(inputFile); rerr2 != nil {
+			os.Remove(outputFile)
+			updateStatus(fileID, "error", originalSize, "ffmpeg: "+rerr2.Error())
+			return
+		}
 	}
 
 	if !verifyOutput(outputFile, inputFile) {
