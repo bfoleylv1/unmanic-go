@@ -1,0 +1,24 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 20px; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+.controls input, .controls button { margin-left: 8px; padding: 6px 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.card { background: #1e1e1e; padding: 12px; border-radius: 6px; text-align: center; }
+.card h3 { font-size: 0.8rem; color: #aaa; margin-bottom: 6px; }
+.card p { font-size: 1.2rem; font-weight: bold; }
+.dirs, .files, .config { background: #1e1e1e; padding: 16px; border-radius: 6px; margin-bottom: 20px; }
+.add-dir { margin-top: 10px; }
+.add-dir input { padding: 8px; width: 300px; }
+.dir-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.tag { background: #333; padding: 4px 10px; border-radius: 4px; font-size: 0.9rem; }
+.config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
+.config-item label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 4px; }
+.config-item input { width: 100%; padding: 8px; background: #111; color: #eee; border: 1px solid #333; border-radius: 4px; }
+.save-btn { background: #16a34a; margin-top: 8px; }
+.save-btn:hover { background: #15803d; }
+.status-msg { margin-top: 8px; font-size: 0.9rem; color: #aaa; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+tbody tr:hover { background: #2a2a2a; }
+button { cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 4px; }
+button:hover { background: #1d4ed8; }

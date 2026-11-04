@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>unmanic-go</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <h1>unmanic-go</h1>
+    <div class="controls">
+      <label>Workers: <input type="number" id="workers" min="1" max="4" value="2"></label>
+      <button id="startBtn">Start</button>
+      <button id="stopBtn">Stop</button>
+      <button id="scanBtn">Scan Now</button>
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="card"><h3>Total</h3><p id="total">0</p></div>
+    <div class="card"><h3>Pending</h3><p id="pending">0</p></div>
+    <div class="card"><h3>Done</h3><p id="done">0</p></div>
+    <div class="card"><h3>Errors</h3><p id="errors">0</p></div>
+    <div class="card"><h3>Original</h3><p id="origSize">0 B</p></div>
+    <div class="card"><h3>Converted</h3><p id="convSize">0 B</p></div>
+  <div class="card"><h3>Size Diff</h3><p id="sizeDiff">0 B</p></div>
+  </section>
+
+  <section class="dirs">
+    <h2>Directories</h2>
+    <div class="dir-list" id="dirList"></div>
+    <div class="add-dir">
+      <input type="text" id="newDir" placeholder="/path/to/media">
+      <button id="addDirBtn">Add</button>
+    </div>
+  </section>
+
+  <section class="files">
+    <h2>Files</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Original</th>
+          <th>Converted</th>
+          <th>Status</th>
+          <th>Error</th>
+        </tr>
+      </thead>
+      <tbody id="fileTable"></tbody>
+    </table>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>
