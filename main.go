@@ -403,7 +403,7 @@ func worker(id int, cancel chan struct{}) {
 		}
 		var fileID, path string
 		var size int64
-		err := db.QueryRow("SELECT id, path, size FROM files WHERE status='pending' LIMIT 1").Scan(&fileID, &path, &size)
+		err := db.QueryRow("SELECT id, path, size FROM files WHERE status='pending' ORDER BY size DESC LIMIT 1").Scan(&fileID, &path, &size)
 		if err != nil {
 			time.Sleep(2 * time.Second)
 			continue
@@ -417,11 +417,13 @@ func processFile(fileID, path string, originalSize int64) {
 	// Fast-fail on invalid/corrupt input (e.g. zero-filled) - repair cannot help
 	if _, err := probeDuration(path); err != nil {
 		updateStatus(fileID, "error", originalSize, "invalid input: "+err.Error())
+		triggerSonarrMissingSearch(path)
 		return
 	}
 	ramFile, err := copyToRamdisk(path)
 	if err != nil {
 		updateStatus(fileID, "error", originalSize, err.Error())
+		triggerSonarrMissingSearch(path)
 		return
 	}
 	defer os.Remove(ramFile)
@@ -460,6 +462,7 @@ func processFile(fileID, path string, originalSize int64) {
 		if rerr2 := transcode(inputFile); rerr2 != nil {
 			os.Remove(outputFile)
 			updateStatus(fileID, "error", originalSize, "ffmpeg: "+rerr2.Error())
+			triggerSonarrMissingSearch(path)
 			return
 		}
 	}
@@ -467,6 +470,7 @@ func processFile(fileID, path string, originalSize int64) {
 	if !verifyOutput(outputFile, inputFile) {
 		updateStatus(fileID, "error", originalSize, "verification failed")
 		os.Remove(outputFile)
+		triggerSonarrMissingSearch(path)
 		return
 	}
 
@@ -479,6 +483,7 @@ func processFile(fileID, path string, originalSize int64) {
 		os.Remove(outputFile)
 		os.Remove(tmpReplace)
 		updateStatus(fileID, "error", originalSize, "copy: "+err.Error())
+		triggerSonarrMissingSearch(path)
 		return
 	}
 	os.Remove(path)
@@ -486,6 +491,7 @@ func processFile(fileID, path string, originalSize int64) {
 		os.Remove(outputFile)
 		os.Remove(tmpReplace)
 		updateStatus(fileID, "error", originalSize, "rename: "+err.Error())
+		triggerSonarrMissingSearch(path)
 		return
 	}
 	os.Remove(outputFile)
@@ -573,6 +579,37 @@ func triggerJellyfinRefresh() {
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, _ := http.NewRequest("POST", config.JellyfinURL+"/Library/Refresh?ApiKey="+config.JellyfinAPIKey, nil)
 	client.Do(req)
+}
+
+
+func triggerSonarrMissingSearch(path string) {
+	if config.SonarrURL == "" || config.SonarrAPIKey == "" {
+		return
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, _ := http.NewRequest("GET", config.SonarrURL+"/api/v3/series", nil)
+	req.Header.Set("X-Api-Key", config.SonarrAPIKey)
+	resp, err := client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	var series []map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&series); err != nil {
+		return
+	}
+	for _, ser := range series {
+		seriesPath, _ := ser["path"].(string)
+		if seriesPath != "" && strings.HasPrefix(path, seriesPath) {
+			seriesID := int(ser["id"].(float64))
+			cmdReq, _ := http.NewRequest("POST", config.SonarrURL+"/api/v3/command",
+				strings.NewReader(fmt.Sprintf(`{"name":"MissingEpisodeSearch","seriesId":%d}`, seriesID)))
+			cmdReq.Header.Set("Content-Type", "application/json")
+			cmdReq.Header.Set("X-Api-Key", config.SonarrAPIKey)
+			client.Do(cmdReq)
+			break
+		}
+	}
 }
 
 
