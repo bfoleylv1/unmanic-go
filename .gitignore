@@ -1,0 +1,14 @@
+# Binaries
+unmanic-go
+unmanic-go-new
+ffmpeg
+ffprobe
+*.db
+
+# Archives
+*.tar.xz
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
